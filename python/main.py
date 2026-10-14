@@ -29,15 +29,19 @@ def draw_text(screen, font, text, center, color=TEXT):
     screen.blit(img, img.get_rect(center=center))
 
 
-def draw_game(screen, state, skin):
+# t in [0..1]: progress between the previous and the current step
+def draw_game(screen, state, prev_snake, t, skin):
     screen.fill(BG)
     _, head_color, body_color = skin
     if state.food:
         fx, fy = state.food
         pygame.draw.circle(screen, FOOD, (fx * CELL + CELL // 2, HUD + fy * CELL + CELL // 2), CELL // 2 - 1)
     for i, (x, y) in enumerate(state.snake):
+        px, py = prev_snake[min(i, len(prev_snake) - 1)]
+        sx = px + (x - px) * t
+        sy = py + (y - py) * t
         color = head_color if i == 0 else body_color
-        pygame.draw.rect(screen, color, (x * CELL + 1, HUD + y * CELL + 1, CELL - 2, CELL - 2))
+        pygame.draw.rect(screen, color, (round(sx * CELL) + 1, HUD + round(sy * CELL) + 1, CELL - 2, CELL - 2))
 
 
 def main():
@@ -50,10 +54,8 @@ def main():
 
     skin_index = 0
     state = G.create_state(best_path=G.BEST_FILE)
+    prev_snake = list(state.snake)
     acc = 0
-
-    def step():
-        G.step(state)
 
     running = True
     while running:
@@ -66,6 +68,7 @@ def main():
                 if not state.alive:
                     if event.key in (pygame.K_SPACE, pygame.K_RETURN):
                         state = G.create_state(best_path=G.BEST_FILE)
+                        prev_snake = list(state.snake)
                         acc = 0
                     elif pygame.K_1 <= event.key < pygame.K_1 + len(SKINS):
                         skin_index = event.key - pygame.K_1
@@ -75,16 +78,19 @@ def main():
                 if d and G.queue_direction(state, d) and len(state.input_queue) == 1 \
                         and G.should_turn_now(acc, state.score):
                     acc = 0
-                    step()
+                    prev_snake = list(state.snake)
+                    G.step(state)
 
         if state.alive:
             acc += dt
             interval = G.current_speed(state.score)
             while state.alive and acc >= interval:
                 acc -= interval
-                step()
+                prev_snake = list(state.snake)
+                G.step(state)
 
-        draw_game(screen, state, SKINS[skin_index])
+        t = min(acc / (G.current_speed(state.score) * G.SMOOTH), 1) if state.alive else 1
+        draw_game(screen, state, prev_snake, t, SKINS[skin_index])
         draw_text(screen, font, f"Score: {state.score}", (70, HUD // 2))
         draw_text(screen, font, f"Best: {state.best}", (SIZE - 70, HUD // 2))
         if not state.alive:
